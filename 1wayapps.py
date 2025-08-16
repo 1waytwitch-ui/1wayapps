@@ -1,65 +1,32 @@
 import streamlit as st
-import pandas as pd
-import requests
-import time
-import plotly.graph_objs as go
+from PIL import Image
 
-st.set_page_config(page_title="Crypto Charts", layout="wide")
+st.set_page_config(page_title="Crypto Dashboard", layout="centered")
 
-# === Fonction pour récupérer les données de prix (CoinGecko) ===
-@st.cache_data(ttl=60)
-def get_crypto_data(coin_id, days=1, interval="minute"):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
-    params = {
-        "vs_currency": "usd",
-        "days": days,
-        "interval": interval
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
+st.title("🚀 Crypto Dashboard")
+st.markdown("Bienvenue ! Choisissez une application ci-dessous pour explorer vos données crypto.")
 
-    prices = data["prices"]
-    df = pd.DataFrame(prices, columns=["timestamp", "price"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-    return df
+st.divider()
 
-# === Mapping simple nom → ID CoinGecko ===
-crypto_map = {
-    "Bitcoin (BTC)": "bitcoin",
-    "Ethereum (ETH)": "ethereum",
-    "USD Coin (USDC)": "usd-coin"
-}
+# Boutons avec icônes et liens vers d'autres apps (pages)
+col1, col2 = st.columns(2)
 
-# === Sidebar navigation ===
-st.sidebar.title("Navigation")
-selected_coin_name = st.sidebar.selectbox("Choisissez une crypto", list(crypto_map.keys()))
-coin_id = crypto_map[selected_coin_name]
+with col1:
+    if st.button("📈 Analyse BTC"):
+        st.switch_page("pages/📈 App1.py")
 
-# === Titre principal ===
-st.title(f"Chart temps réel : {selected_coin_name}")
+    if st.button("📊 Analyse ETH"):
+        st.switch_page("pages/📊 App2.py")
 
-# === Chargement des données ===
-with st.spinner("Chargement des données en temps réel..."):
-    df = get_crypto_data(coin_id)
+    if st.button("🧮 Comparateur"):
+        st.switch_page("pages/🧮 App3.py")
 
-# === Affichage du graphique ===
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=df["timestamp"],
-    y=df["price"],
-    mode="lines",
-    name=selected_coin_name
-))
+with col2:
+    if st.button("📉 Alertes marché"):
+        st.switch_page("pages/📉 App4.py")
 
-fig.update_layout(
-    title=f"Prix de {selected_coin_name} (USD)",
-    xaxis_title="Temps",
-    yaxis_title="Prix en USD",
-    template="plotly_dark",
-    autosize=True
-)
+    if st.button("💹 Portefeuille"):
+        st.switch_page("pages/💹 App5.py")
 
-st.plotly_chart(fig, use_container_width=True)
-
-# === Dernier prix ===
-st.metric("Dernier prix", f"${df['price'].iloc[-1]:,.2f}")
+st.divider()
+st.markdown("👨‍💻 _Développé avec Streamlit – mise à jour temps réel des données crypto._")
