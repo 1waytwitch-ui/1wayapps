@@ -12,14 +12,14 @@ st.divider()
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("📈 Analyse BTC"):
-        st.switch_page("pages/📈 App1.py")
+    if st.button("📈 Analyse DEFI wallet"):
+        st.switch_page("https://defisplit.streamlit.app/")
 
-    if st.button("📊 Analyse ETH"):
-        st.switch_page("pages/📊 App2.py")
+    if st.button("📊 ETH TP"):
+        st.switch_page("https://eth-tp-app.streamlit.app/")
 
-    if st.button("🧮 Comparateur"):
-        st.switch_page("pages/🧮 App3.py")
+    if st.button("🧮 Rebalances cost"):
+        st.switch_page("pages/🧮 https://rebalancecost.streamlit.app/")
 
 with col2:
     if st.button("📉 Alertes marché"):
@@ -29,4 +29,4 @@ with col2:
         st.switch_page("pages/💹 App5.py")
 
 st.divider()
-st.markdown("👨‍💻 _Développé avec Streamlit – mise à jour temps réel des données crypto._")
+st.markdown("👨‍💻 _Développé par 1way – mise à jour temps réel des données crypto._")
