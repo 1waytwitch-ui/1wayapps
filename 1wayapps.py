@@ -7,7 +7,6 @@ from datetime import datetime, date
 
 cg = CoinGeckoAPI()
 
-# Fonction pour récupérer prix historique en USD depuis CoinGecko
 def get_price_history(coin_id, start_date):
     start_timestamp = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
     end_timestamp = int(datetime.now().timestamp())
@@ -21,7 +20,6 @@ def get_price_history(coin_id, start_date):
     df = df[['price']]
     return df
 
-# Fonctions financières
 def calculate_cagr(prices):
     n = len(prices) / 365
     cagr = (prices[-1] / prices[0])**(1 / n) - 1
@@ -39,14 +37,12 @@ def calculate_max_drawdown(prices):
     drawdowns = (prices - roll_max) / roll_max
     return drawdowns.min()
 
-# Date début par défaut : 1er janvier année courante
 default_start_date = date.today().replace(month=1, day=1).strftime("%Y-%m-%d")
 
 st.title("Stratégie de Farming Crypto 🚀")
 
 start_date = st.date_input("Date de début", value=datetime.strptime(default_start_date, "%Y-%m-%d"))
 
-# Liste des cryptos avec bons IDs CoinGecko
 cryptos = {
     'weth': 'Wrapped Ether',
     'usd-coin': 'USDC (Stablecoin)',
@@ -62,18 +58,15 @@ selected_coins = st.multiselect(
 )
 
 if st.button("Télécharger les prix historiques"):
-    # Récupération des données prix
     dfs = {}
     for coin in selected_coins:
         df = get_price_history(coin, start_date.strftime("%Y-%m-%d"))
         dfs[coin] = df
 
-    # Merge sur la date
     prices_df = pd.concat(dfs.values(), axis=1)
     prices_df.columns = [cryptos[c] for c in dfs.keys()]
     prices_df.dropna(inplace=True)
 
-    # Affichage prix historiques
     plt.style.use('dark_background' if st.get_option("theme.base") == "dark" else 'default')
     fig, ax = plt.subplots(figsize=(12,6))
     for col in prices_df.columns:
@@ -86,28 +79,32 @@ if st.button("Télécharger les prix historiques"):
     plt.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # Calcul rendement journalier
     returns = prices_df.pct_change().dropna()
 
-    # Calcul stratégies simples
-    # Buy & Hold = croissance prix
-    buy_hold = (1 + returns).cumprod()
-
-    # Farming Strategy : farming rewards (ex: 1% / an linéaire sur ETH)
-    farming_rewards = (1 + 0.01 / 365) ** np.arange(len(buy_hold))
-    if 'Wrapped Ether' in buy_hold.columns:
-        farming_strategy = buy_hold['Wrapped Ether'] * farming_rewards
+    # Stratégie Buy & Hold : on s'assure que la colonne existe
+    if 'Wrapped Ether' in returns.columns:
+        buy_hold = (1 + returns['Wrapped Ether']).cumprod()
     else:
-        farming_strategy = buy_hold.iloc[:, 0] * farming_rewards  # fallback
+        # fallback sur première colonne disponible
+        buy_hold = (1 + returns.iloc[:, 0]).cumprod()
 
-    # Construction dataframe stratégie
+    # Farming Strategy : farming rewards 1% / an linéaire sur ETH
+    farming_rewards = (1 + 0.01 / 365) ** np.arange(len(buy_hold))
+    farming_strategy = buy_hold * farming_rewards
+
+    # Buy & Hold USDC pour comparer (stablecoin)
+    if 'USDC (Stablecoin)' in returns.columns:
+        usdc_hold = (1 + returns['USDC (Stablecoin)']).cumprod()
+    else:
+        usdc_hold = np.ones(len(buy_hold))
+
+    # Construire DataFrame final avec index correspondant
     strategies_df = pd.DataFrame({
-        'Buy & Hold': buy_hold['Wrapped Ether'] if 'Wrapped Ether' in buy_hold.columns else buy_hold.iloc[:,0],
+        'Buy & Hold': buy_hold,
         'Farming Strategy': farming_strategy,
-        'USDC (Stablecoin)': buy_hold['USDC (Stablecoin)'] if 'USDC (Stablecoin)' in buy_hold.columns else np.ones(len(buy_hold)),
+        'USDC (Stablecoin)': usdc_hold,
     }, index=buy_hold.index)
 
-    # Plot stratégies
     fig2, ax2 = plt.subplots(figsize=(12,6))
     for col in strategies_df.columns:
         ax2.plot(strategies_df.index, strategies_df[col], label=col)
@@ -119,7 +116,6 @@ if st.button("Télécharger les prix historiques"):
     plt.grid(True, alpha=0.3)
     st.pyplot(fig2)
 
-    # Calcul métriques
     metrics = {}
     for strat in strategies_df.columns:
         prices = strategies_df[strat]
@@ -132,10 +128,8 @@ if st.button("Télécharger les prix historiques"):
         }
     metrics_df = pd.DataFrame(metrics).T
 
-    # Affichage métriques
     st.write("## Métriques des stratégies")
     st.dataframe(metrics_df.style.format("{:.2%}"))
 
-    # Footer
     st.markdown("---")
     st.markdown("<p style='text-align:center;'>Développé par 1way</p>", unsafe_allow_html=True)
