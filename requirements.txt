@@ -1,4 +1,5 @@
 streamlit
+pycoingecko
 pandas
 matplotlib
 requests
