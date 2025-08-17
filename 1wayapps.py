@@ -7,12 +7,12 @@ from datetime import datetime, date
 
 cg = CoinGeckoAPI()
 
+# Fonction pour récupérer prix historique en USD depuis CoinGecko
 def get_price_history(coin_id, start_date):
     start_timestamp = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
     end_timestamp = int(datetime.now().timestamp())
-    data = cg.get_coin_market_chart_range_by_id(
-        id=coin_id, vs_currency='usd',
-        from_timestamp=start_timestamp, to_timestamp=end_timestamp)
+    data = cg.get_coin_market_chart_range_by_id(id=coin_id, vs_currency='usd',
+                                               from_timestamp=start_timestamp, to_timestamp=end_timestamp)
     prices = data['prices']
     df = pd.DataFrame(prices, columns=['timestamp', 'price'])
     df['date'] = pd.to_datetime(df['timestamp'], unit='ms').dt.date
@@ -20,16 +20,17 @@ def get_price_history(coin_id, start_date):
     df = df[['price']]
     return df
 
+# Fonctions financières (CAGR, vol, sharpe, drawdowns)
 def calculate_cagr(prices):
-    n = len(prices) / 365
-    cagr = (prices[-1] / prices[0])**(1 / n) - 1
+    n = len(prices)/365
+    cagr = (prices[-1] / prices[0])**(1/n) - 1
     return cagr
 
 def calculate_annual_volatility(returns):
     return returns.std() * np.sqrt(365)
 
 def calculate_sharpe_ratio(returns, risk_free_rate=0.0):
-    excess_returns = returns - risk_free_rate / 365
+    excess_returns = returns - risk_free_rate/365
     return np.sqrt(365) * excess_returns.mean() / excess_returns.std()
 
 def calculate_max_drawdown(prices):
@@ -37,36 +38,37 @@ def calculate_max_drawdown(prices):
     drawdowns = (prices - roll_max) / roll_max
     return drawdowns.min()
 
+# Date début par défaut : 1er janvier année courante
 default_start_date = date.today().replace(month=1, day=1).strftime("%Y-%m-%d")
 
 st.title("Stratégie de Farming Crypto 🚀")
 
 start_date = st.date_input("Date de début", value=datetime.strptime(default_start_date, "%Y-%m-%d"))
 
+# Liste des cryptos disponibles pour l'exemple
 cryptos = {
-    'weth': 'Wrapped Ether',
+    'wrapped-ether': 'Wrapped Ether',
     'usd-coin': 'USDC (Stablecoin)',
     'bitcoin': 'Bitcoin',
     'dai': 'DAI (Stablecoin)',
 }
 
-selected_coins = st.multiselect(
-    "Choisir les cryptos",
-    options=list(cryptos.keys()),
-    format_func=lambda x: cryptos[x],
-    default=['weth', 'usd-coin']
-)
+selected_coins = st.multiselect("Choisir les cryptos", options=list(cryptos.keys()), format_func=lambda x: cryptos[x],
+                                default=['wrapped-ether', 'usd-coin'])
 
 if st.button("Télécharger les prix historiques"):
+    # Récupération des données prix
     dfs = {}
     for coin in selected_coins:
         df = get_price_history(coin, start_date.strftime("%Y-%m-%d"))
         dfs[coin] = df
 
+    # Merge sur la date
     prices_df = pd.concat(dfs.values(), axis=1)
     prices_df.columns = [cryptos[c] for c in dfs.keys()]
     prices_df.dropna(inplace=True)
 
+    # Affichage prix historiques
     plt.style.use('dark_background' if st.get_option("theme.base") == "dark" else 'default')
     fig, ax = plt.subplots(figsize=(12,6))
     for col in prices_df.columns:
@@ -79,26 +81,25 @@ if st.button("Télécharger les prix historiques"):
     plt.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # Calcul des stratégies en partant des prix (normalisés)
-    if 'Wrapped Ether' in prices_df.columns:
-        buy_hold = prices_df['Wrapped Ether'] / prices_df['Wrapped Ether'].iloc[0]
-    else:
-        buy_hold = prices_df.iloc[:, 0] / prices_df.iloc[:, 0].iloc[0]
+    # Calcul rendement journalier
+    returns = prices_df.pct_change().dropna()
 
-    farming_rewards = (1 + 0.01 / 365) ** np.arange(len(buy_hold))
-    farming_strategy = buy_hold * farming_rewards
+    # Calcul stratégies simples
+    # Buy & Hold = croissance prix
+    buy_hold = (1 + returns).cumprod()
 
-    if 'USDC (Stablecoin)' in prices_df.columns:
-        usdc_hold = prices_df['USDC (Stablecoin)'] / prices_df['USDC (Stablecoin)'].iloc[0]
-    else:
-        usdc_hold = np.ones(len(buy_hold))
+    # Farming Strategy : exemple simple avec farming rewards (1% / an linéaire sur ETH)
+    farming_rewards = (1 + 0.01/365) ** np.arange(len(buy_hold))
+    farming_strategy = buy_hold['Wrapped Ether'] * farming_rewards
 
+    # Construction dataframe stratégie
     strategies_df = pd.DataFrame({
-        'Buy & Hold': buy_hold,
+        'Buy & Hold': buy_hold['Wrapped Ether'],
         'Farming Strategy': farming_strategy,
-        'USDC (Stablecoin)': usdc_hold,
+        'USDC (Stablecoin)': buy_hold['USDC (Stablecoin)'] if 'USDC (Stablecoin)' in buy_hold.columns else np.ones(len(buy_hold)),
     }, index=buy_hold.index)
 
+    # Plot stratégies
     fig2, ax2 = plt.subplots(figsize=(12,6))
     for col in strategies_df.columns:
         ax2.plot(strategies_df.index, strategies_df[col], label=col)
@@ -123,8 +124,20 @@ if st.button("Télécharger les prix historiques"):
         }
     metrics_df = pd.DataFrame(metrics).T
 
+    # Explication des métriques financières
+    st.markdown("""
+    ## Explication des métriques utilisées
+
+    - **CAGR (Taux de croissance annuel composé)** : mesure la croissance moyenne annuelle d’un investissement sur une période donnée, en tenant compte de l’effet de capitalisation.  
+    - **Volatilité** : mesure de la variation des rendements journaliers annualisée, reflète le risque lié à la fluctuation des prix.  
+    - **Sharpe Ratio** : mesure le ratio rendement excédentaire par unité de risque (volatilité), plus il est élevé mieux l’investissement est considéré.  
+    - **Max Drawdown** : la plus grande perte maximale observée entre un pic et un creux, indique la pire baisse de valeur de l’investissement.
+    """)
+
+    # Affichage métriques
     st.write("## Métriques des stratégies")
     st.dataframe(metrics_df.style.format("{:.2%}"))
 
+    # Footer
     st.markdown("---")
     st.markdown("<p style='text-align:center;'>Développé par 1way</p>", unsafe_allow_html=True)
