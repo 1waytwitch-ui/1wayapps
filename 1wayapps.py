@@ -79,26 +79,20 @@ if st.button("Télécharger les prix historiques"):
     plt.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    returns = prices_df.pct_change().dropna()
-
-    # Stratégie Buy & Hold : on s'assure que la colonne existe
-    if 'Wrapped Ether' in returns.columns:
-        buy_hold = (1 + returns['Wrapped Ether']).cumprod()
+    # Calcul des stratégies en partant des prix (normalisés)
+    if 'Wrapped Ether' in prices_df.columns:
+        buy_hold = prices_df['Wrapped Ether'] / prices_df['Wrapped Ether'].iloc[0]
     else:
-        # fallback sur première colonne disponible
-        buy_hold = (1 + returns.iloc[:, 0]).cumprod()
+        buy_hold = prices_df.iloc[:, 0] / prices_df.iloc[:, 0].iloc[0]
 
-    # Farming Strategy : farming rewards 1% / an linéaire sur ETH
     farming_rewards = (1 + 0.01 / 365) ** np.arange(len(buy_hold))
     farming_strategy = buy_hold * farming_rewards
 
-    # Buy & Hold USDC pour comparer (stablecoin)
-    if 'USDC (Stablecoin)' in returns.columns:
-        usdc_hold = (1 + returns['USDC (Stablecoin)']).cumprod()
+    if 'USDC (Stablecoin)' in prices_df.columns:
+        usdc_hold = prices_df['USDC (Stablecoin)'] / prices_df['USDC (Stablecoin)'].iloc[0]
     else:
         usdc_hold = np.ones(len(buy_hold))
 
-    # Construire DataFrame final avec index correspondant
     strategies_df = pd.DataFrame({
         'Buy & Hold': buy_hold,
         'Farming Strategy': farming_strategy,
@@ -116,6 +110,7 @@ if st.button("Télécharger les prix historiques"):
     plt.grid(True, alpha=0.3)
     st.pyplot(fig2)
 
+    # Calcul métriques
     metrics = {}
     for strat in strategies_df.columns:
         prices = strategies_df[strat]
