@@ -23,7 +23,6 @@ def apply_theme(dark_mode: bool):
         button_hover = '#005577'
         title_color = '#005577'
 
-    # CSS dynamique
     st.markdown(
         f"""
         <style>
@@ -73,6 +72,15 @@ def apply_theme(dark_mode: bool):
             color: white !important;
             border-radius: 10px;
             padding: 10px;
+        }}
+
+        footer {{
+            text-align: center;
+            color: {text_color};
+            margin-top: 50px;
+            font-size: 1.1em;
+            font-weight: bold;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }}
         </style>
         """,
@@ -162,7 +170,6 @@ def farmSimulate(pair, apr, start, end, neon_colors, grid_color, bg_color, title
 def main():
     st.title("Simulation de Farming LP vs Performance")
 
-    # Detecter le thème clair ou sombre
     dark_mode = st.get_option("theme.base") == "dark"
     neon_colors, grid_color, bg_color, title_color = apply_theme(dark_mode)
 
@@ -174,7 +181,7 @@ def main():
         return
 
     df_prices = geckoHistorical(pair[0])
-    min_date = df_prices.index.min().date()
+    min_date = datetime.date(datetime.date.today().year, 1, 1)  # Début année en cours
     max_date = df_prices.index.max().date()
 
     start_date = st.date_input("Date de début", value=min_date, min_value=min_date, max_value=max_date)
@@ -188,6 +195,8 @@ def main():
 
     if st.button("Simuler"):
         farmSimulate(pair, apr, pd.Timestamp(start_date), pd.Timestamp(end_date), neon_colors, grid_color, bg_color, title_color)
+
+    st.markdown(f"<footer>Développé par <b>1way</b></footer>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
