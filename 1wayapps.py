@@ -4,78 +4,131 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, date
+import calendar
 
-# Initialiser CoinGecko
 cg = CoinGeckoAPI()
 
-# Récupérer prix historique réel (USD) pour un coin sur une période donnée
-def get_historical_prices(coin_id, start_date):
-    days = (date.today() - start_date).days
-    data = cg.get_coin_market_chart_by_id(id=coin_id, vs_currency='usd', days=days)
-    prices = data['prices']  # list [timestamp, price]
+# Fonction pour récupérer prix historique en USD depuis CoinGecko
+def get_price_history(coin_id, start_date):
+    start_timestamp = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+    end_timestamp = int(datetime.now().timestamp())
+    data = cg.get_coin_market_chart_range_by_id(id=coin_id, vs_currency='usd',
+                                               from_timestamp=start_timestamp, to_timestamp=end_timestamp)
+    prices = data['prices']
     df = pd.DataFrame(prices, columns=['timestamp', 'price'])
     df['date'] = pd.to_datetime(df['timestamp'], unit='ms').dt.date
-    df = df.set_index('date')
-    df = df.loc[start_date:]  # filtrer à partir de la date choisie
-    return df['price']
+    df = df.groupby('date').last()
+    df = df[['price']]
+    return df
 
-# Paramètres du thème flashy crypto
-def set_plot_style():
-    plt.style.use('dark_background')
-    plt.rcParams.update({
-        'axes.facecolor': '#1a1a1a',
-        'axes.edgecolor': '#00ffcc',
-        'axes.labelcolor': '#00ffcc',
-        'xtick.color': '#00ffff',
-        'ytick.color': '#00ffff',
-        'grid.color': '#333333',
-        'grid.linestyle': '--',
-        'text.color': '#00ffcc',
-        'legend.facecolor': '#222222',
-        'legend.edgecolor': '#00ffcc',
-    })
+# Fonctions financières (CAGR, vol, sharpe, drawdowns)
+def calculate_cagr(prices):
+    n = len(prices)/365
+    cagr = (prices[-1] / prices[0])**(1/n) - 1
+    return cagr
 
-def main():
-    st.title("Stratégie de Farming Crypto 🚀")
+def calculate_annual_volatility(returns):
+    return returns.std() * np.sqrt(365)
 
-    # Date de début par défaut : 1er janvier de l'année en cours
-    default_start = date(datetime.today().year, 1, 1)
-    start_date = st.date_input("Date de début", value=default_start)
+def calculate_sharpe_ratio(returns, risk_free_rate=0.0):
+    excess_returns = returns - risk_free_rate/365
+    return np.sqrt(365) * excess_returns.mean() / excess_returns.std()
 
-    coins = {
-        "weth": "Wrapped Ether",
-        "usd-coin": "USDC (Stablecoin)",
-        "tether": "USDT (Stablecoin)",
-        "bitcoin": "Bitcoin (BTC)",
-    }
+def calculate_max_drawdown(prices):
+    roll_max = prices.cummax()
+    drawdowns = (prices - roll_max) / roll_max
+    return drawdowns.min()
 
-    selected_coins = st.multiselect("Choisir les cryptos", options=list(coins.keys()), format_func=lambda x: coins[x], default=["weth", "usd-coin"])
+# Date début par défaut : 1er janvier année courante
+default_start_date = date.today().replace(month=1, day=1).strftime("%Y-%m-%d")
 
-    if st.button("Télécharger les prix historiques"):
-        with st.spinner("Récupération des données..."):
-            price_data = {}
-            for coin in selected_coins:
-                prices = get_historical_prices(coin, start_date)
-                price_data[coin] = prices
+st.title("Stratégie de Farming Crypto 🚀")
 
-            df_prices = pd.DataFrame(price_data)
-            df_prices = df_prices.fillna(method='ffill').fillna(method='bfill')
+start_date = st.date_input("Date de début", value=datetime.strptime(default_start_date, "%Y-%m-%d"))
 
-            set_plot_style()
-            fig, ax = plt.subplots(figsize=(12, 6))
-            for coin in selected_coins:
-                ax.plot(df_prices.index, df_prices[coin], label=coins[coin])
+# Liste des cryptos disponibles pour l'exemple
+cryptos = {
+    'wrapped-ether': 'Wrapped Ether',
+    'usd-coin': 'USDC (Stablecoin)',
+    'bitcoin': 'Bitcoin',
+    'dai': 'DAI (Stablecoin)',
+}
 
-            ax.set_title("Evolution des prix historiques")
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Prix en USD")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
+selected_coins = st.multiselect("Choisir les cryptos", options=list(cryptos.keys()), format_func=lambda x: cryptos[x],
+                                default=['wrapped-ether', 'usd-coin'])
 
+if st.button("Télécharger les prix historiques"):
+    # Récupération des données prix
+    dfs = {}
+    for coin in selected_coins:
+        df = get_price_history(coin, start_date.strftime("%Y-%m-%d"))
+        dfs[coin] = df
+
+    # Merge sur la date
+    prices_df = pd.concat(dfs.values(), axis=1)
+    prices_df.columns = [cryptos[c] for c in dfs.keys()]
+    prices_df.dropna(inplace=True)
+
+    # Affichage prix historiques
+    plt.style.use('dark_background' if st.get_option("theme.base") == "dark" else 'default')
+    fig, ax = plt.subplots(figsize=(12,6))
+    for col in prices_df.columns:
+        ax.plot(prices_df.index, prices_df[col], label=col)
+    ax.set_title("Evolution des prix historiques")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Prix en USD")
+    ax.legend()
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    st.pyplot(fig)
+
+    # Calcul rendement journalier
+    returns = prices_df.pct_change().dropna()
+
+    # Calcul stratégies simples
+    # Buy & Hold = croissance prix
+    buy_hold = (1 + returns).cumprod()
+
+    # Farming Strategy : exemple simple avec farming rewards (1% / an linéaire sur ETH)
+    farming_rewards = (1 + 0.01/365) ** np.arange(len(buy_hold))
+    farming_strategy = buy_hold['Wrapped Ether'] * farming_rewards
+
+    # Construction dataframe stratégie
+    strategies_df = pd.DataFrame({
+        'Buy & Hold': buy_hold['Wrapped Ether'],
+        'Farming Strategy': farming_strategy,
+        'USDC (Stablecoin)': buy_hold['USDC (Stablecoin)'] if 'USDC (Stablecoin)' in buy_hold.columns else np.ones(len(buy_hold)),
+    }, index=buy_hold.index)
+
+    # Plot stratégies
+    fig2, ax2 = plt.subplots(figsize=(12,6))
+    for col in strategies_df.columns:
+        ax2.plot(strategies_df.index, strategies_df[col], label=col)
+    ax2.set_title("Performance des stratégies")
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Valeur relative")
+    ax2.legend()
+    plt.xticks(rotation=45)
+    plt.grid(True, alpha=0.3)
+    st.pyplot(fig2)
+
+    # Calcul métriques
+    metrics = {}
+    for strat in strategies_df.columns:
+        prices = strategies_df[strat]
+        r = prices.pct_change().dropna()
+        metrics[strat] = {
+            "CAGR": calculate_cagr(prices.values),
+            "Volatilité": calculate_annual_volatility(r),
+            "Sharpe Ratio": calculate_sharpe_ratio(r),
+            "Max Drawdown": calculate_max_drawdown(prices),
+        }
+    metrics_df = pd.DataFrame(metrics).T
+
+    # Affichage métriques
+    st.write("## Métriques des stratégies")
+    st.dataframe(metrics_df.style.format("{:.2%}"))
+
+    # Footer
     st.markdown("---")
-    st.markdown("<center>Développé par <b>1way</b></center>", unsafe_allow_html=True)
-
-
-if __name__ == "__main__":
-    main()
+    st.markdown("<p style='text-align:center;'>Développé par 1way</p>", unsafe_allow_html=True)
