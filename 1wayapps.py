@@ -1,14 +1,15 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import datetime
 
-# Exemple fictif de fonction geckoHistorical pour rappel (à remplacer par ta vraie fonction)
+# Exemple fictif de fonction geckoHistorical (à remplacer par vraie récupération API)
 def geckoHistorical(token):
-    # Simuler récupération des prix (remplacer par vraie API)
+    # Génère des prix simulés pour 500 jours à partir du 2021-01-01
     dates = pd.date_range(start="2021-01-01", periods=500, freq='D')
-    prices = pd.Series(100 + pd.np.cumsum(pd.np.random.randn(500)), index=dates).abs()
+    prices = pd.Series(100 + np.cumsum(np.random.randn(500)), index=dates).abs()
     return pd.DataFrame({'price': prices})
 
 def farmSimulate(pair, apr, start_date, end_date):
@@ -79,9 +80,10 @@ def farmSimulate(pair, apr, start_date, end_date):
         st.error("Les données téléchargées ne contiennent pas 2 colonnes nécessaires.")
         return None
 
+# --- Interface Streamlit ---
+
 st.title("Simulation de Farming LP vs Performance")
 
-# Liste tokens élargie
 tokens_available = [
     "bitcoin", "ethereum", "weth", "usdc", "usdt", "tether",
     "cbbtc", "dogecoin", "litecoin", "binancecoin", "matic-network"
@@ -89,7 +91,9 @@ tokens_available = [
 
 pair = st.multiselect("Choisir la paire de tokens (exactement 2):", tokens_available, default=["weth", "usdc"])
 apr = st.number_input("APR en %", min_value=0.0, max_value=100.0, value=25.0, step=0.1)
-start_date = st.date_input("Date de début", value=datetime.date(2021, 1, 1))
+
+default_start_date = datetime.date(datetime.datetime.now().year, 1, 1)
+start_date = st.date_input("Date de début", value=default_start_date)
 end_date = st.date_input("Date de fin", value=datetime.date.today())
 
 if st.button("Simuler"):
